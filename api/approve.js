@@ -68,6 +68,22 @@ module.exports = async function handler(req, res) {
       );
     }
 
+    // 1b. Structural validation. Broken templates (e.g. ones that link to
+    // ../../styles.css instead of inlining the full design system, or pages
+    // that contain unresolved git merge markers) must NOT be allowed to
+    // publish. Lessons learned from 4/27, 4/30, 5/4, 5/5 outages.
+    const validation = validatePostHtml(draft.post_html);
+    if (!validation.ok) {
+      log(`STRUCTURAL VALIDATION FAILED: ${validation.reasons.join('; ')}`);
+      return errPage(422, 'Draft Failed Structural Check',
+        `This draft did not pass the post-HTML structural check, so it was NOT published.<br><br>` +
+        `Reasons:<br>&bull; ` + validation.reasons.join('<br>&bull; ') + `<br><br>` +
+        `The draft has been left in 'pending' so a corrected build can replace it.<br><br>` +
+        `<small>Edition: ${draft.edition_date} &middot; size: ${(draft.post_html || '').length} bytes</small>`
+      );
+    }
+    log(`structural check passed (size=${draft.post_html.length}, inline-style-bytes=${validation.inlineStyleBytes})`);
+
     // 2. Try direct push to main (fast path). On any failure fall through to PR path.
     const liveSlug = String(draft.slug).replace(/-daily-dink$/, '');
     const postPath = `news/daily-dink/${liveSlug}.html`;
@@ -333,6 +349,78 @@ async function markApproved(supabaseUrl, supabaseKey, draftId) {
   } catch (e) {
     console.warn('markApproved failed (non-fatal):', e.message);
   }
+}
+
+// Structural sanity check on the post HTML before it's pushed to GitHub.
+// Hard-won rules — each one corresponds to a real outage:
+//   - 4/27, 4/30, 5/4, 5/5: pages came in tiny (~10-15KB), linking to
+//     ../../styles.css instead of inlining the full design system. The
+//     rendered page had no nav / header / footer styling.
+//   - earlier outage: pages contained unresolved git merge markers because
+//     a manual push left HEAD/======= literals in the file.
+// If any check fails, approve refuses to publish so a broken page can
+// never reach production. Draft stays 'pending' until a clean rebuild
+// arrives.
+function validatePostHtml(html) {
+  const reasons = [];
+  if (!html || typeof html !== 'string') {
+    return { ok: false, reasons: ['post_html is missing or not a string'], inlineStyleBytes: 0 };
+  }
+
+  // 1. Minimum size — a real edition with the inlined design system is ~100KB.
+  //    A broken externalstyles.css edition is ~10-15KB. Pick a floor that is
+  //    well above broken and well below working, with margin.
+  const MIN_BYTES = 60000;
+  if (html.length < MIN_BYTES) {
+    reasons.push(`post_html is only ${html.length} bytes (need >= ${MIN_BYTES}). A working edition inlines the design system and runs ~100KB.`);
+  }
+
+  // 2. Must NOT link to the external ../../styles.css. That file exists, but
+  //    does not contain the site nav/header chrome the daily dink template
+  //    needs, so its presence here is the signature of the broken template.
+  if (/href=["']\.\.\/\.\.\/styles\.css["']/.test(html)) {
+    reasons.push('post_html links to ../../styles.css externally. Daily Dink editions must inline the full design system.');
+  }
+
+  // 3. Must NOT contain unresolved git merge markers.
+  if (/^<{7} HEAD$/m.test(html) || /^={7}$/m.test(html) || /^>{7} [a-f0-9]{7,}/m.test(html)) {
+    reasons.push('post_html contains unresolved git merge markers (<<<<<<< / ======= / >>>>>>>).');
+  }
+
+  // 4. Must contain a substantial inline <style> block. The working template
+  //    has ~4000 lines / ~80KB of inline CSS. We require at least 30KB to
+  //    catch any future "minimal style" template that slips through.
+  let inlineStyleBytes = 0;
+  const styleBlocks = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+  for (const block of styleBlocks) inlineStyleBytes += block.length;
+  if (inlineStyleBytes < 30000) {
+    reasons.push(`inline <style> blocks total only ${inlineStyleBytes} bytes (need >= 30000). Design system not inlined.`);
+  }
+
+  // 5. Required structural anchors — these come from the working template.
+  //    Some are matched as "any of" because the active template uses one set
+  //    of class names while older fixed pages may carry a different set.
+  const requiredAll = [
+    { needle: '<article class="news-post">',  label: '<article class="news-post"> wrapper' },
+    { needle: 'class="news-post-title"',      label: '.news-post-title element' },
+    { needle: 'class="dink-headlines"',       label: '.dink-headlines list container' },
+    { needle: 'class="news-post-dek"',        label: '.news-post-dek paragraph' },
+  ];
+  for (const r of requiredAll) {
+    if (!html.includes(r.needle)) reasons.push(`missing required marker: ${r.label}`);
+  }
+  // Footer: at least one of these has to be present.
+  const footerAnchors = ['class="footer-container"', 'class="site-footer"'];
+  if (!footerAnchors.some(a => html.includes(a))) {
+    reasons.push(`missing footer anchor (need one of: ${footerAnchors.join(', ')})`);
+  }
+  // Header chrome: at least one of these has to be present.
+  const headerAnchors = ['class="header-container"', 'class="site-header"'];
+  if (!headerAnchors.some(a => html.includes(a))) {
+    reasons.push(`missing site header anchor (need one of: ${headerAnchors.join(', ')})`);
+  }
+
+  return { ok: reasons.length === 0, reasons, inlineStyleBytes };
 }
 
 function escapeHtml(s) {
