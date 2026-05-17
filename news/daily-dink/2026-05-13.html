@@ -4050,6 +4050,78 @@ textarea:focus-visible {
 
 
   </style>
+
+  <style>
+    .dink-headlines { list-style: none; padding: 0; margin: 0; }
+    .dink-headline-item {
+      padding: 1.75rem 0;
+      border-bottom: 1px solid #e7e7e7;
+    }
+    .dink-headline-item:first-child { padding-top: 0.5rem; }
+    .dink-headline-item:last-child { border-bottom: 0; }
+    .dink-headline-title {
+      font-family: 'Bebas Neue', Impact, sans-serif;
+      font-size: 1.75rem;
+      line-height: 1.12;
+      letter-spacing: 0.5px;
+      margin: 0 0 0.6rem;
+      color: #0a1d3c;
+      font-weight: 400;
+    }
+    .dink-headline-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.8rem;
+    }
+    .dink-headline-tag {
+      display: inline-block;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      background: #f0f2f5;
+      color: #0a1d3c;
+      padding: 0.22rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      line-height: 1.2;
+          text-decoration: none;
+      transition: background 0.15s ease;
+    }
+    .dink-headline-tag:hover { background: #e0e3e8; color: #0a1d3c; }
+    /* fitk-tag-link-patch */
+    .dink-headline-summary {
+      font-size: 0.98rem;
+      line-height: 1.6;
+      color: #333;
+      margin: 0 0 0.9rem;
+    }
+    .dink-headline-source {
+      display: inline-block;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #C8963E;
+      text-decoration: underline;
+      text-decoration-color: #C8963E;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      transition: opacity 0.15s ease;
+    }
+    .dink-headline-source:hover { opacity: 0.75; }
+    .dink-disclaimer {
+      margin-top: 2rem;
+      color: #888;
+      font-size: 0.85rem;
+    }
+    @media (max-width: 640px) {
+      .dink-headline-title { font-size: 1.5rem; }
+      .dink-headline-tag { font-size: 0.55rem; padding: 0.2rem 0.45rem; }
+    }
+  </style>
+
 </head>
 <body>
   <!-- Announcement Bar -->
