@@ -21,6 +21,18 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Hard-reject gate: post_html must be a full ~100KB edition (inlined CSS).
+    // Generating HTML from scratch produces ~15KB; surgical swap from template produces ~100KB.
+    // If this check fails, the caller MUST do a surgical swap from the prior day's file.
+    if (typeof post_html !== 'string' || post_html.length < 60000) {
+      return res.status(400).json({
+        error: 'post_html too small',
+        bytes: typeof post_html === 'string' ? post_html.length : 0,
+        minimum: 60000,
+        hint: 'Use surgical swap from prior day\'s ~100KB edition; do not generate from scratch.'
+      });
+    }
+
     // Normalize headline shape so a scheduler drift (e.g. {url, source, preview})
     // doesn't render "undefined" in the approval email. Canonical shape is:
     //   { title, summary, source_url, source_name, tags }
